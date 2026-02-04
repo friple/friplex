@@ -5,6 +5,28 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>kurd Gift</title>
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Встроенные минимальные стили для панели баланс�� и payment modal (добавлены локально, можно вынести в styles.css) */
+    #balance-panel {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 11000;
+      background: linear-gradient(180deg,#0b1620,#051019);
+      color: #f7fbff;
+      padding: 10px 14px;
+      border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+      font-weight:700;
+      min-width:140px;
+    }
+    #balance-panel .bal-row { display:flex; justify-content:space-between; gap:8px; align-items:center; font-size:13px; }
+    #payment-modal .modal-content { max-width:520px; }
+    @media (max-width:600px){
+      #balance-panel { right:8px; left:auto; top:8px; padding:8px; font-size:13px; min-width: 120px; }
+      .market-grid { grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+    }
+  </style>
 </head>
 <body>
   <div id="app" class="app">
@@ -12,29 +34,12 @@
 
     <header class="topbar">
       <div class="topbar-inner">
-        <h1 id="page-title" style="display:none"> <!-- Оставлен скрытый для совместимости --> </h1>
+        <h1 id="page-title" style="display:none"></h1>
       </div>
     </header>
 
-    <!-- Рулетки (быстро доступно) -->
     <main class="page" id="page-roulette">
-      <section class="roulette-list">
-        <div class="card card-roulette" data-type="r1" tabindex="0" role="button">
-          <div class="card-head"><h3>Рулетка 1</h3><span class="tag">25 ⭐</span></div>
-        </div>
-
-        <div class="card card-roulette" data-type="r2" tabindex="0" role="button">
-          <div class="card-head"><h3>Рулетка 2</h3><span class="tag">50 ⭐</span></div>
-        </div>
-
-        <div class="card card-roulette" data-type="r3" tabindex="0" role="button">
-          <div class="card-head"><h3>Рулетка 3</h3><span class="tag">100 ⭐</span></div>
-        </div>
-
-        <div class="card card-roulette" data-type="rnft" tabindex="0" role="button">
-          <div class="card-head"><h3>NFT‑рулетка</h3><span class="tag">NFT</span></div>
-        </div>
-      </section>
+      <!-- Рулетка была удалена по запросу -->
     </main>
 
     <main class="page hidden" id="page-profile">
@@ -52,27 +57,14 @@
               <div class="tg-nick" id="profile-tgnick">@yourtg</div>
               <div class="profile-id muted" id="profile-id">ID: 000000</div>
             </div>
-            <div class="stars">Баланс: <span id="balance">0</span> ⭐</div>
 
             <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
-              <button id="topup-btn" class="btn btn-primary">Пополнить звёзды</button>
+              <button id="topup-btn" class="btn btn-primary">Пополнить</button>
               <button id="open-withdraw" class="btn withdraw-btn">Вывести подарки</button>
-              <button id="profile-market-btn-send" class="btn listing-action" style="margin-left:8px">Отправить подарок</button>
-              <button id="profile-market-btn" class="btn btn-primary" style="margin-left:8px">Выставленные подарки</button>
+              <button id="profile-market-btn" class="btn btn-primary">Выставленные подарки</button>
             </div>
 
-            <div class="send-gift-card" style="margin-top:12px">
-              <div class="send-row">
-                <div>
-                  <div class="muted" style="font-size:12px">Отправить быстрый подарок</div>
-                  <div style="font-weight:700">Подарок 15 ⭐ — получатель <span class="accent">@xionzq</span></div>
-                </div>
-                <div>
-                  <button id="send15" class="btn btn-primary">Отправить 15 ⭐</button>
-                </div>
-              </div>
-              <div class="muted" style="font-size:12px;margin-top:8px">При получении подарок может быть зачислен в инвентарь бота</div>
-            </div>
+            <!-- Быстрый подарок удалён по запросу -->
           </div>
         </div>
 
@@ -96,35 +88,31 @@
 
     <!-- Right-top balance panel -->
     <aside id="balance-panel" class="balance-panel" aria-hidden="false">
-      <div class="balance-snow">❄️</div>
-      <div class="balance-inner">
-        <div class="bp-title">Звёзды</div>
-        <div class="bp-value" id="balance-right">0 ⭐</div>
-        <div class="bp-sub muted">Баланс аккаунта</div>
-      </div>
+      <div class="bal-row"><div>TON</div><div id="bal-ton">0</div></div>
+      <div class="bal-row" style="margin-top:6px"><div>USDT</div><div id="bal-usdt">0</div></div>
+      <div style="margin-top:8px"><small class="muted">Пополнить: TON / TRC20 USDT</small></div>
     </aside>
 
     <nav class="bottom-nav" role="navigation" aria-label="Навигация">
-      <button class="nav-btn" data-page="roulette">Рулетка</button>
+      <!-- Кнопка "Рулетка" удалена по запросу -->
       <button class="nav-btn" data-page="profile">Профиль</button>
       <button class="nav-btn" data-page="history">История</button>
+      <button class="nav-btn" data-page="market">Маркет</button>
     </nav>
 
-    <!-- Modal: wheel + result area -->
+    <!-- Modal: wheel + result area (unchanged, рулетка может быть скрыта в UI) -->
     <div id="modal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
       <div class="modal-content">
         <button class="modal-close" id="modal-close" aria-label="Закрыть">✕</button>
         <h3 id="modal-title">Рулетка</h3>
-
         <div class="wheel-wrap">
           <div class="wheel-indicator" aria-hidden="true"></div>
           <div class="wheel-outline">
             <canvas id="wheel-canvas" class="wheel-canvas" width="360" height="360" aria-hidden="false"></canvas>
           </div>
         </div>
-
         <div class="modal-controls">
-          <div class="cost">Стоимость прокрутки: <span id="modal-cost">0</span> ⭐</div>
+          <div class="cost">Стоимость прокрутки: <span id="modal-cost">0</span></div>
           <div class="speed-controls">
             <label class="speed-label">Режим:</label>
             <div class="speed-buttons">
@@ -137,10 +125,7 @@
             <button class="btn btn-primary" id="spin-action">Крутить</button>
           </div>
         </div>
-
         <div id="modal-result" class="modal-result" aria-live="polite"></div>
-
-        <!-- win overlay (полу-окошко) -->
         <div id="win-popup" class="win-popup hidden" role="dialog" aria-modal="false">
           <div class="win-sticker" id="win-sticker">🎁</div>
           <div class="win-text" id="win-text">Поздравляем! Вы выиграли</div>
@@ -149,13 +134,46 @@
             <button id="win-spin" class="btn">Открыть инвентарь</button>
           </div>
         </div>
-
       </div>
-
       <div id="confetti" class="confetti" aria-hidden="true"></div>
     </div>
 
-    <!-- Withdraw modal (profile) -->
+    <!-- Payment modal -->
+    <div id="payment-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-content">
+        <button class="modal-close" id="payment-close" aria-label="Закрыть">✕</button>
+        <h3 class="highlight-text">Пополнение TON / USDT</h3>
+        <p class="muted">Выберите валюту и сумму. Сгенерируется уникальный memo — укажите его в комментарии перевода (TON) или отправьте вместе с переводом (если кошелёк поддерживает). После перевода нажмите "Проверить оплату".</p>
+
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+          <label>Валюта:
+            <select id="pay-currency" style="margin-left:6px;padding:6px;border-radius:6px">
+              <option value="TON">TON</option>
+              <option value="USDT">USDT (TRC20)</option>
+            </select>
+          </label>
+          <label>Сумма:
+            <input id="pay-amount" type="number" min="0.0001" step="0.0001" placeholder="Сколько положить?" style="width:140px;margin-left:6px;padding:6px;border-radius:6px" />
+          </label>
+        </div>
+
+        <div id="pay-instructions" style="margin-top:12px;display:none">
+          <div style="margin-bottom:8px"><strong>Адрес:</strong> <span id="pay-address" style="font-family:monospace"></span> <button id="copy-address" class="btn" style="margin-left:8px">Копировать</button></div>
+          <div style="margin-bottom:8px"><strong>Memo / Token:</strong> <span id="pay-memo" style="font-family:monospace"></span> <button id="copy-memo" class="btn" style="margin-left:8px">Копировать</button></div>
+          <div class="muted" style="font-size:13px">Memo одноразовый — используйте то��но как указано. Нажмите "Я оплатил" и затем "Проверить оплату".</div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button id="generate-pay" class="btn btn-primary">Сгенерировать memo</button>
+          <button id="i-paid" class="btn">Я оплатил</button>
+          <button id="check-pay" class="btn btn-primary" style="display:none">Проверить оплату</button>
+        </div>
+
+        <div id="pay-msg" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- Withdraw modal (unchanged id present) -->
     <div id="withdraw-modal" class="modal hidden" aria-hidden="true">
       <div class="modal-content">
         <button class="modal-close" id="withdraw-close" aria-label="Закрыть">✕</button>
@@ -170,56 +188,6 @@
       </div>
     </div>
 
-    <!-- Top-up modal -->
-    <div id="topup-modal" class="modal hidden" aria-hidden="true">
-      <div class="modal-content">
-        <button class="modal-close" id="topup-close" aria-label="Закрыть">✕</button>
-        <h3>Пополнить звёзды</h3>
-        <p class="muted">Выберите сумму для пополнения (быстрые кнопки):</p>
-        <div class="topup-grid" id="topup-amounts" style="margin-top:12px">
-          <button class="topup-btn" data-amount="15">15</button>
-          <button class="topup-btn" data-amount="25">25</button>
-          <button class="topup-btn" data-amount="50">50</button>
-          <button class="topup-btn" data-amount="100">100</button>
-          <button class="topup-btn" data-amount="200">200</button>
-          <button class="topup-btn" data-amount="500">500</button>
-          <button class="topup-btn" data-amount="1000">1000</button>
-        </div>
-
-        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-          <button id="topup-confirm" class="btn btn-primary">Подтвердить</button>
-          <button id="topup-cancel" class="btn">Отмена</button>
-        </div>
-        <div id="topup-msg" style="margin-top:12px"></div>
-      </div>
-    </div>
-
-    <!-- Send gift modal (profile) -->
-    <div id="send-gift-modal" class="modal hidden" aria-hidden="true">
-      <div class="modal-content" style="max-width:520px">
-        <button class="modal-close" id="send-gift-close" aria-label="Закрыть">✕</button>
-        <h3 class="highlight-text" style="margin-top:0">Отправить подарок @Xionzq</h3>
-        <p class="muted">Откройте чат с @Xionzq в Telegram и отправьте подарок. После отправки подтвердите ниже и укажите номер подарка (token). Только NFT автоматически появляется в маркет.</p>
-
-        <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-          <button id="open-chat-xion" class="btn btn-primary">Открыть чат @Xionzq</button>
-          <button id="i-sent-gift" class="btn">Я отправил</button>
-        </div>
-
-        <div id="confirm-send-area" style="margin-top:12px;display:none">
-          <label>Номер/токен подарка (пример: LolPop-369710)</label>
-          <input id="sent-gift-token" style="width:100%;padding:8px;border-radius:8px;margin-top:6px;background:#061018;color:#e6eef9;border:1px solid rgba(255,255,255,0.04)" placeholder="Введите token из сообщения..." />
-          <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-            <label style="display:flex;gap:8px;align-items:center"><input id="sent-gift-is-nft" type="checkbox" /> NFT</label>
-            <button id="confirm-add-sent" class="btn btn-primary">Подтвердить и зачислить</button>
-          </div>
-        </div>
-
-        <div id="send-gift-msg" style="margin-top:10px"></div>
-      </div>
-    </div>
-
-    <!-- click cloud container -->
     <div id="clouds" class="clouds" aria-hidden="true"></div>
   </div>
 
