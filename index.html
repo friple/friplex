@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Небесный клуб</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+    <div class="garland" aria-hidden="true">
+      <div class="garland-bulb b1"></div><div class="garland-bulb b2"></div><div class="garland-bulb b3"></div><div class="garland-bulb b4"></div>
+    </div>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <h1 id="page-title">Небесный клуб</h1>
+      </div>
+    </header>
+
+    <!-- Рулетки (быстро доступно) -->
+    <main class="page" id="page-roulette">
+      <section class="roulette-list">
+        <div class="card card-roulette" data-type="r1" tabindex="0" role="button">
+          <div class="card-head"><h3>Рулетка 1</h3><span class="tag">25 ⭐</span></div>
+        </div>
+
+        <div class="card card-roulette" data-type="r2" tabindex="0" role="button">
+          <div class="card-head"><h3>Рулетка 2</h3><span class="tag">50 ⭐</span></div>
+        </div>
+
+        <div class="card card-roulette" data-type="r3" tabindex="0" role="button">
+          <div class="card-head"><h3>Рулетка 3</h3><span class="tag">100 ⭐</span></div>
+        </div>
+
+        <div class="card card-roulette" data-type="rnft" tabindex="0" role="button">
+          <div class="card-head"><h3>NFT‑рулетка</h3><span class="tag">NFT</span></div>
+        </div>
+      </section>
+    </main>
+
+    <main class="page hidden" id="page-profile">
+      <section class="profile">
+        <div class="profile-block card">
+          <div class="profile-left">
+            <div class="avatar tg-avatar" id="profile-avatar" title="Аватар">
+              <span class="avatar-emoji">☁️</span>
+            </div>
+          </div>
+
+          <div class="profile-info">
+            <div class="username" id="profile-name">Пользователь</div>
+            <div class="tg-row">
+              <div class="tg-nick" id="profile-tgnick">@yourtg</div>
+              <div class="profile-id muted" id="profile-id">ID: 000000</div>
+            </div>
+            <div class="stars">Баланс: <span id="balance">0</span> ⭐</div>
+
+            <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+              <button id="topup-btn" class="btn btn-primary">Пополнить звёзды</button>
+              <button id="open-withdraw" class="btn withdraw-btn">Вывести подарки</button>
+            </div>
+
+            <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+              <button id="subscribe-btn" class="btn">Я подписан в TG (симуляция)</button>
+              <div id="subscribe-indicator" class="muted" style="font-size:13px">Не подписан</div>
+            </div>
+
+            <div class="send-gift-card">
+              <div class="send-row">
+                <div>
+                  <div class="muted" style="font-size:12px">Отправить подарок</div>
+                  <div style="font-weight:700">Подарок 15 ⭐ — получатель <span class="accent">@xionzq</span></div>
+                </div>
+                <div>
+                  <button id="send15" class="btn btn-primary">Отправить 15 ⭐</button>
+                </div>
+              </div>
+              <div class="muted" style="font-size:12px;margin-top:8px">При получении подарка он будет зачислен (симуляция)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="inventory card inventory-panel">
+          <div class="inventory-header">
+            <h4>Инвентарь</h4>
+          </div>
+          <div id="inventory-list" class="inventory-grid"><div class="empty">— пусто —</div></div>
+        </div>
+      </section>
+    </main>
+
+    <main class="page hidden" id="page-history">
+      <section class="history card">
+        <h3>История транзакций</h3>
+        <div id="history-list" class="history-list">
+          <div class="muted">Транзакции появятся здесь.</div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Right floating balance panel -->
+    <aside id="balance-panel" class="balance-panel" aria-hidden="false">
+      <div class="balance-snow">❄️</div>
+      <div class="balance-inner">
+        <div class="bp-title">Звёзды</div>
+        <div class="bp-value" id="balance-right">0 ⭐</div>
+        <div class="bp-sub muted">Баланс аккаунта</div>
+      </div>
+    </aside>
+
+    <nav class="bottom-nav" role="navigation" aria-label="Навигация">
+      <button class="nav-btn" data-page="roulette">Рулетка</button>
+      <button class="nav-btn" data-page="profile">Профиль</button>
+      <button class="nav-btn" data-page="history">История</button>
+    </nav>
+
+    <!-- Modal: wheel + result area -->
+    <div id="modal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="modal-content">
+        <button class="modal-close" id="modal-close" aria-label="Закрыть">✕</button>
+        <h3 id="modal-title">Рулетка</h3>
+
+        <div class="wheel-wrap">
+          <div class="wheel-indicator" aria-hidden="true"></div>
+          <div class="wheel-outline">
+            <canvas id="wheel-canvas" class="wheel-canvas" width="360" height="360" aria-hidden="false"></canvas>
+          </div>
+        </div>
+
+        <div class="modal-controls">
+          <div class="cost">Стоимость прокрутки: <span id="modal-cost">0</span> ⭐</div>
+          <div class="speed-controls">
+            <label class="speed-label">Режим:</label>
+            <div class="speed-buttons">
+              <button class="speed-btn" data-speed="fast" id="speed-fast">Быстро</button>
+              <button class="speed-btn active" data-speed="medium" id="speed-medium">Средне</button>
+              <button class="speed-btn" data-speed="slow" id="speed-slow">Медленно</button>
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-primary" id="spin-action">Крутить</button>
+          </div>
+        </div>
+
+        <div id="modal-result" class="modal-result" aria-live="polite"></div>
+
+        <!-- win overlay (полу-окошко) -->
+        <div id="win-popup" class="win-popup hidden" role="dialog" aria-modal="false">
+          <div class="win-sticker" id="win-sticker">🎁</div>
+          <div class="win-text" id="win-text">Поздравляем! Вы выиграли</div>
+          <div class="win-actions">
+            <button id="win-keep" class="btn btn-primary">Оставить</button>
+            <button id="win-spin" class="btn">Открыть инвентарь</button>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="confetti" class="confetti" aria-hidden="true"></div>
+    </div>
+
+    <!-- Withdraw modal (profile) -->
+    <div id="withdraw-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-content">
+        <button class="modal-close" id="withdraw-close" aria-label="Закрыть">✕</button>
+        <h3>Вывести подарки</h3>
+        <p class="muted">Выберите подарки для вывода (они будут удалены из инвентаря):</p>
+        <div id="withdraw-list" style="margin-top:10px;max-height:240px;overflow:auto"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <button id="withdraw-confirm" class="btn btn-primary">Вывести выбранные</button>
+          <button id="withdraw-cancel" class="btn">Отмена</button>
+        </div>
+        <div id="withdraw-msg" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- Top-up modal -->
+    <div id="topup-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-content">
+        <button class="modal-close" id="topup-close" aria-label="Закрыть">✕</button>
+        <h3>Пополнить звёзды</h3>
+        <p class="muted">Выберите сумму для пополнения (быстрые кнопки):</p>
+        <div class="topup-grid" id="topup-amounts" style="margin-top:12px">
+          <button class="topup-btn" data-amount="15">15</button>
+          <button class="topup-btn" data-amount="25">25</button>
+          <button class="topup-btn" data-amount="50">50</button>
+          <button class="topup-btn" data-amount="100">100</button>
+          <button class="topup-btn" data-amount="200">200</button>
+          <button class="topup-btn" data-amount="500">500</button>
+          <button class="topup-btn" data-amount="1000">1000</button>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <button id="topup-confirm" class="btn btn-primary">Подтвердить</button>
+          <button id="topup-cancel" class="btn">Отмена</button>
+        </div>
+        <div id="topup-msg" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- click cloud container -->
+    <div id="clouds" class="clouds" aria-hidden="true"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
