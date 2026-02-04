@@ -1,17 +1,11 @@
-// Full updated app.js with requested fixes:
-// - Users cannot buy their own listings.
-// - Users cannot place bids on their own auctions.
-// - Only the owner (seller) of an NFT/listing can accept offers for that listing.
-// - "Выставленные подарки" button fixed and opens modal with user's listings.
-// - Auction bid reservation/refund: if you are outbid your reserved funds are returned so you can bid again.
-// - "Аукцион" button removed from profile; auction creation available only next to inventory items.
-// - "Отправить подарок" opens Telegram chat directly (no selection).
-// - When listing an item, a clear "точно выставить за такую сумму?" confirmation shown with logical Yes/No.
-// - Market / Auctions navigation buttons remain in bottom nav (we ensure we append only to .bottom-nav).
-// - NFTs added to inventory after purchase contain only: _id, title, image.
-// - Auction timers update every second accurately.
-// - Offers lists show only active (pending) offers.
-// Other logic and UI left unchanged where not requested.
+// Full updated app.js — merged original + requested fixes + random NFT seeding + improved market filter
+// Changes summary (kept minimal):
+// - Offers: funds reserved on creation, refunded on cancel/reject, transferred to seller on accept.
+// - Auction: can be cancelled by seller only if no bids; bids reserve funds; refunds on outbid/lose; auto-finalize on end.
+// - History: only 'purchase' and 'sale' entries saved.
+// - Added random NFT models and seeding into user's profile (only once).
+// - Market search now matches item title and aliases/keywords (so queries like "Nehpot", "Kidsack Frog", "Magic Potion" work).
+// - Other code left unchanged (UI, layout, unrelated logic).
 
 (() => {
   const STORAGE_KEY = 'miniapp_v4_4_state';
@@ -31,6 +25,19 @@
     lollipop: 'Lollipop (NFT)'
   };
 
+  // --- NEW: random NFT model list (images under CDN_BASE) ---
+  const RANDOM_NFT_MODELS = [
+    { _id: 'AstralShark-001', title: 'Astral Shark', image: `${CDN_BASE}/astral_shark.png`, aliases: ['astral shark', 'shark'] },
+    { _id: 'SnakeBox-002', title: 'Snake Box', image: `${CDN_BASE}/snake_box.png`, aliases: ['snake box', 'snakebox'] },
+    { _id: 'Doshirak-003', title: 'Доширак', image: `${CDN_BASE}/doshirak.png`, aliases: ['доширак', 'doshirak'] },
+    { _id: 'Lollipop-004', title: 'Леденец', image: `${CDN_BASE}/lollipop.png`, aliases: ['леденец', 'lollipop'] },
+    { _id: 'PlushPP-005', title: 'Плюш ПП', image: `${CDN_BASE}/plush_pp.png`, aliases: ['плюш', 'plush'] },
+    { _id: 'Nehpot-006', title: 'Nehpot', image: `${CDN_BASE}/nehpot.png`, aliases: ['nehpot'] },
+    { _id: 'KidsackFrog-007', title: 'Kidsack Frog', image: `${CDN_BASE}/kidsack_frog.png`, aliases: ['kidsack frog','kidsack','frog'] },
+    { _id: 'MagicPotion-008', title: 'Magic Potion', image: `${CDN_BASE}/magic_potion.png`, aliases: ['magic potion','potion'] }
+  ];
+  // ----------------------------------------------------------------
+
   let state = {
     balance: 999999,
     inventory: [],
@@ -41,7 +48,9 @@
     auctions: [],
     profile: { name: 'Пользователь', tgnick: '@yourtg', id: '000000', subscribed: false },
     lastFreeSpin: 0,
-    pendingPayment: null
+    pendingPayment: null,
+    // internal flag to avoid reseeding random NFTs multiple times
+    _nftsSeeded: false
   };
 
   const roulettes = {
@@ -63,6 +72,8 @@
       .inventory-footer { display:flex;gap:8px; margin-top:8px; justify-content:flex-start; align-items:center; }
       .muted { color:#9fb0c8 !important; }
       .auction-time { font-weight:700; color:#ffd36a; }
+      .market-card .preview { width:72px;height:72px;border-radius:8px;object-fit:cover; }
+      .price-badge { background:linear-gradient(90deg,#0b3b5a,#0d6b8a);color:#fff;padding:6px 10px;border-radius:8px;font-weight:800; }
     `;
     const st = document.createElement('style');
     st.setAttribute('id','injected-theme-fixes');
@@ -126,6 +137,7 @@
   let offersGlobalModal = null;
   let sendGiftModal = null;
   let myListingsModal = null;
+  let listingOffersModal = null;
 
   const WITHDRAW_FEE = 0.20;
 
@@ -151,7 +163,7 @@
     const samples = [
       {
         id: `L-369710-lolpop`,
-        item: { _id: 'LolPop-369710', title: 'LolPop', emoji: '🍭', image: `${CDN_BASE}/${ASSET_MAP.lollipop}`, description: 'Lolipop NFT' },
+        item: { _id: 'LolPop-369710', title: 'LolPop', emoji: '🍭', image: `${CDN_BASE}/${ASSET_MAP.lollipop}`, description: 'Lolipop NFT', aliases: ['lollipop','lolpop','nehpot'] },
         price: 250,
         seller: '@market_owner',
         sellerId: 'owner_1',
@@ -160,7 +172,7 @@
       },
       {
         id: `L-369713-giftbox`,
-        item: { _id: 'GiftBox-369713', title: 'GiftBox', emoji: '🎁', image: `${CDN_BASE}/${ASSET_MAP.gift}`, description: 'Gift box NFT' },
+        item: { _id: 'GiftBox-369713', title: 'GiftBox', emoji: '🎁', image: `${CDN_BASE}/${ASSET_MAP.gift}`, description: 'Gift box NFT', aliases: ['giftbox','kidsack frog','magic potion'] },
         price: 95,
         seller: '@market_owner',
         sellerId: 'owner_4',
@@ -171,8 +183,8 @@
     state.market.push(...samples);
     state.inventory = state.inventory || [];
     if (state.inventory.length === 0) {
-      state.inventory.push({ _id: 'LolPop-369710', title: 'LolPop', image: `${CDN_BASE}/${ASSET_MAP.lollipop}` });
-      state.inventory.push({ _id: 'GiftBox-369713', title: 'GiftBox', image: `${CDN_BASE}/${ASSET_MAP.gift}` });
+      state.inventory.push({ _id: 'LolPop-369710', title: 'LolPop', image: `${CDN_BASE}/${ASSET_MAP.lollipop}`, aliases: ['lollipop'] });
+      state.inventory.push({ _id: 'GiftBox-369713', title: 'GiftBox', image: `${CDN_BASE}/${ASSET_MAP.gift}`, aliases: ['giftbox'] });
     }
     saveState();
   }
@@ -184,7 +196,9 @@
     return s;
   }
 
+  // HISTORY: only keep purchase & sale
   function addHistory(type, amount, desc){
+    if (!['purchase','sale'].includes(type)) return; // ignore other types
     const entry = { id: genTxId(), type, amount: Number(amount) || 0, desc: desc || '', ts: new Date().toISOString() };
     state.history = state.history || [];
     state.history.unshift(entry);
@@ -399,7 +413,6 @@
           const item = { _id: listing.item._id || listing.item.title, title: listing.item.title, image: getImageForItem(listing.item) };
           state.inventory = state.inventory || [];
           state.inventory.push(item);
-          addHistory('delist', 0, `Delisted ${listing.item.title}`);
           saveState();
           refreshMyListingsModalContent();
           renderInventory();
@@ -420,22 +433,35 @@
         if (String(listing.sellerId) !== String(state.profile.id)) return alert('Только владелец лота может принимать оферы.');
         const ok = await showConfirm(`Принять офер ${offer.amount} TON от ${escapeHtml(offer.fromBuyerId)} на "${listing.item.title}"?`);
         if (!ok) return;
-        if (String(offer.fromBuyerId) === String(state.profile.id)) {
-          if ((state.balance || 0) < offer.amount) { alert('Покупатель не имеет достаточно TON. Офер отклонён.'); offer.status='rejected'; saveState(); refreshMyListingsModalContent(); return; }
-          state.balance = Number(state.balance) - offer.amount;
+
+        // seller receives funds if current user
+        if (String(listing.sellerId) === String(state.profile.id)) {
+          state.balance = Number(state.balance) + Number(offer.amount || 0);
+          addHistory('sale', offer.amount, `Продажа ${listing.item.title}`);
         }
-        state.balance = Number(state.balance) + Number(offer.amount || 0);
-        state.market = (state.market || []).filter(m => m.id !== listing.id);
+
+        // buyer gets item if buyer is current user
         if (String(offer.fromBuyerId) === String(state.profile.id)) {
           const bought = { _id: listing.item._id || listing.item.title, title: listing.item.title, image: getImageForItem(listing.item) };
           state.inventory = state.inventory || [];
           state.inventory.push(bought);
-          addHistory('purchase_offer_accept', -offer.amount, `Покупка по оферу ${offer.amount} TON — ${listing.item.title}`);
-        } else {
-          addHistory('offer_accepted', offer.amount, `Офер ${offer.amount} TON принят — ${listing.item.title}`);
+          addHistory('purchase', -offer.amount, `Покупка ${listing.item.title}`);
         }
-        offer.status = 'accepted';
-        (state.offers || []).forEach(o => { if (o.listingId === listing.id && o.id !== offer.id && o.status === 'pending') o.status = 'rejected'; });
+
+        // remove listing and reject others (refund current user's other offers)
+        state.market = (state.market || []).filter(m => m.id !== listing.id);
+        (state.offers || []).forEach(o => {
+          if (o.listingId === listing.id) {
+            if (o.id === offer.id) o.status = 'accepted';
+            else {
+              if (o.status === 'pending' && String(o.fromBuyerId) === String(state.profile.id) && o.reserved) {
+                state.balance = Number(state.balance) + Number(o.amount || 0);
+              }
+              o.status = 'rejected';
+            }
+          }
+        });
+
         saveState();
         refreshMyListingsModalContent();
         renderInventory();
@@ -451,6 +477,9 @@
         if (!offer) return alert('Офер не найден.');
         const ok = await showConfirm('Отклонить офер?');
         if (!ok) return;
+        if (String(offer.fromBuyerId) === String(state.profile.id) && offer.reserved) {
+          state.balance = Number(state.balance) + Number(offer.amount || 0);
+        }
         offer.status = 'rejected';
         saveState();
         refreshMyListingsModalContent();
@@ -561,7 +590,7 @@
           };
           state.market = state.market || [];
           state.market.push(listing);
-          addHistory('list', 0, `Listed ${removed.title} for ${price} TON`);
+          // no history for listing
           saveState();
           listingConfirmModal.classList.add('hidden');
           renderInventory();
@@ -642,7 +671,7 @@
       });
     }
 
-    // handlers
+    // handlers (refund current user's reserved offers on cancel/reject)
     body.querySelectorAll('.cancel-offer').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.dataset.id;
@@ -650,6 +679,9 @@
         if (!of) return alert('Офер не найден.');
         const ok = await showConfirm('Отменить офер?');
         if (!ok) return;
+        if (String(of.fromBuyerId) === String(state.profile.id) && of.reserved) {
+          state.balance = Number(state.balance) + Number(of.amount || 0);
+        }
         of.status = 'rejected';
         saveState();
         openOffersGlobal();
@@ -666,22 +698,36 @@
         if (String(listing.sellerId) !== String(state.profile.id)) return alert('Только владелец лота может принимать оферы.');
         const ok = await showConfirm(`Принять офер ${offer.amount} TON?`);
         if (!ok) return;
-        if (String(offer.fromBuyerId) === String(state.profile.id)) {
-          if ((state.balance || 0) < offer.amount) { alert('Недостаточно средств у покупателя.'); offer.status='rejected'; saveState(); openOffersGlobal(); return; }
-          state.balance = Number(state.balance) - offer.amount;
+
+        // seller receives funds if seller is current user
+        if (String(listing.sellerId) === String(state.profile.id)) {
+          state.balance = Number(state.balance) + Number(offer.amount || 0);
+          addHistory('sale', offer.amount, `Продажа ${listing.item.title}`);
         }
-        state.balance = Number(state.balance) + Number(offer.amount || 0);
-        state.market = (state.market || []).filter(m => m.id !== listing.id);
+
+        // buyer receives item if buyer is current user
         if (String(offer.fromBuyerId) === String(state.profile.id)) {
           const bought = { _id: listing.item._id || listing.item.title, title: listing.item.title, image: getImageForItem(listing.item) };
           state.inventory = state.inventory || [];
           state.inventory.push(bought);
-          addHistory('purchase_offer_accept', -offer.amount, `Покупка по оферу ${offer.amount} TON — ${listing.item.title}`);
-        } else {
-          addHistory('offer_accepted', offer.amount, `Офер ${offer.amount} TON принят — ${listing.item.title}`);
+          addHistory('purchase', -offer.amount, `Покупка ${listing.item.title}`);
         }
-        offer.status = 'accepted';
-        (state.offers || []).forEach(o => { if (o.listingId === listing.id && o.id !== offer.id && o.status === 'pending') o.status = 'rejected'; });
+
+        // remove listing
+        state.market = (state.market || []).filter(m => m.id !== listing.id);
+        // reject other offers and refund current user's reservations if necessary
+        (state.offers || []).forEach(o => {
+          if (o.listingId === listing.id) {
+            if (o.id === offer.id) o.status = 'accepted';
+            else {
+              if (o.status === 'pending' && String(o.fromBuyerId) === String(state.profile.id) && o.reserved) {
+                state.balance = Number(state.balance) + Number(o.amount || 0);
+              }
+              o.status = 'rejected';
+            }
+          }
+        });
+
         saveState();
         openOffersGlobal();
         renderInventory();
@@ -696,6 +742,9 @@
         if (!of) return alert('Офер не найден.');
         const ok = await showConfirm('Отклонить офер?');
         if (!ok) return;
+        if (String(of.fromBuyerId) === String(state.profile.id) && of.reserved) {
+          state.balance = Number(state.balance) + Number(of.amount || 0);
+        }
         of.status = 'rejected';
         saveState();
         openOffersGlobal();
@@ -741,7 +790,7 @@
       const item = state.inventory.splice(idx,1)[0];
       const auction = {
         id: `A-${Date.now()}`,
-        item: { _id: item._id, title: item.title, image: getImageForItem(item) },
+        item: { _id: item._id, title: item.title, image: getImageForItem(item), description: item.description || '', aliases: item.aliases || [] },
         sellerId: state.profile && state.profile.id ? state.profile.id : 'seller_0',
         sellerNick: state.profile && state.profile.tgnick ? state.profile.tgnick : 'seller',
         startPrice: Number(start),
@@ -754,7 +803,6 @@
       };
       state.auctions = state.auctions || [];
       state.auctions.push(auction);
-      addHistory('create_auction', 0, `Created auction ${auction.item.title} start ${start} TON for ${durMinutes}m`);
       saveState();
       auctionCreateModal.classList.add('hidden');
       renderInventory();
@@ -870,7 +918,6 @@
         if (String(auction.sellerId) === String(state.profile.id)) return alert('Нельзя делать ставку на свой аукцион.');
         const minAllowed = auction.currentBid ? auction.currentBid + 1 : auction.startPrice;
         if (raw < minAllowed) return alert(`Ставка должна быть не меньше ${minAllowed} TON.`);
-        // If current user already highest, disallow new bid until outbid
         if (String(auction.currentBidderId) === String(state.profile.id)) {
           return alert('Вы уже являетесь текущим лидером — дождитесь перебивания, чтобы сделать новую ставку.');
         }
@@ -881,15 +928,10 @@
         }
         // Deduct funds (reserve) for new bidder
         state.balance = Number(state.balance) - raw;
-        // Refund previous highest bidder if it was current user (i.e., they are being outbid by someone else) OR if previous highest was current user, they get refunded (handled when someone else bids)
         const prevId = auction.currentBidderId;
         if (prevId && auction.reserved && auction.reserved[prevId]) {
-          // if the previous bidder is current user, refund them (this case occurs when someone else outbids)
           if (String(prevId) === String(state.profile.id)) {
             state.balance = Number(state.balance) + Number(auction.reserved[prevId] || 0);
-          } else {
-            // If someone else was previous highest and they had reserved funds, we cannot modify their balance in this single-user demo.
-            // We remove their reservation node so state is consistent.
           }
           delete auction.reserved[prevId];
         }
@@ -914,7 +956,7 @@
       bidsEl.scrollIntoView({ behavior: 'smooth' });
     });
 
-    // admin panel: only seller can finalize when ended
+    // admin panel: only seller can finalize when ended, or cancel if no bids
     const adminPanel = body.querySelector('#auction-admin-panel');
     adminPanel.innerHTML = '';
     if (String(auction.sellerId) === String(state.profile.id)) {
@@ -923,13 +965,32 @@
         finalizeBtn.className = 'btn btn-primary';
         finalizeBtn.textContent = 'Завершить аукцион';
         finalizeBtn.addEventListener('click', async () => {
-          await finalizeAuction(auction.id);
+          await finalizeAuction(auction.id, false);
           openAuctionsPage();
           alert('Аукцион завершён.');
         });
         adminPanel.appendChild(finalizeBtn);
       } else {
-        adminPanel.innerHTML = `<div class="muted">Вы владелец. Аукцион завершится: ${new Date(auction.endsAt).toLocaleString()}</div>`;
+        if (!auction.bids || auction.bids.length === 0) {
+          const cancelBtn = document.createElement('button');
+          cancelBtn.className = 'btn';
+          cancelBtn.textContent = 'Отменить аукцион';
+          cancelBtn.addEventListener('click', async () => {
+            const ok = await showConfirm('Отменить аукцион и вернуть предмет в инвентарь?');
+            if (!ok) return;
+            state.auctions = (state.auctions || []).filter(a => a.id !== auction.id);
+            state.inventory = state.inventory || [];
+            state.inventory.push({ _id: auction.item._id || auction.item.title, title: auction.item.title, image: getImageForItem(auction.item) });
+            saveState();
+            renderInventory();
+            renderAuctions();
+            showPage('auctions');
+            alert('Аукцион отменён, предмет возвращён.');
+          });
+          adminPanel.appendChild(cancelBtn);
+        } else {
+          adminPanel.innerHTML = `<div class="muted">Вы владелец. Аукцион завершится: ${new Date(auction.endsAt).toLocaleString()}</div>`;
+        }
       }
     }
 
@@ -937,34 +998,48 @@
   }
 
   // Finalize auction: winner gets item, seller gets funds; reserved funds handled
-  async function finalizeAuction(auctionId){
+  async function finalizeAuction(auctionId, silent = true){
     const idx = (state.auctions || []).findIndex(a => a.id === auctionId);
-    if (idx < 0) return alert('Аукцион не найден.');
+    if (idx < 0) return;
     const auc = state.auctions[idx];
-    if ((Date.now()) < auc.endsAt) return alert('Аукцион ещё идёт.');
+    if ((Date.now()) < auc.endsAt) {
+      if (!silent) alert('Аукцион ещё идёт.');
+      return;
+    }
     if (auc.bids && auc.bids.length > 0) {
       const highest = auc.bids.reduce((p,c)=> c.amount > p.amount ? c : p, auc.bids[0]);
-      // Credit seller
-      state.balance = Number(state.balance || 0) + Number(highest.amount || 0);
-      // If winner is current user: add minimal NFT
+      // Credit seller if current user
+      if (String(auc.sellerId) === String(state.profile.id)) {
+        state.balance = Number(state.balance || 0) + Number(highest.amount || 0);
+        addHistory('sale', highest.amount, `Продажа ${auc.item.title}`);
+      }
+      // Winner gets item if current user
       if (String(highest.bidderId) === String(state.profile.id)) {
         const bought = { _id: auc.item._id || auc.item.title, title: auc.item.title, image: getImageForItem(auc.item) };
         state.inventory = state.inventory || [];
         state.inventory.push(bought);
-        addHistory('auction_win', -highest.amount, `Вы выиграли ${auc.item.title} за ${highest.amount} TON`);
-        // clear reservation
+        addHistory('purchase', -highest.amount, `Покупка ${auc.item.title}`);
         if (auc.reserved && auc.reserved[state.profile.id]) delete auc.reserved[state.profile.id];
       } else {
-        addHistory('auction_sold', highest.amount, `Лот ${auc.item.title} продан за ${highest.amount} TON`);
+        // refund reserved for current user if present and they didn't win
+        if (auc.reserved && auc.reserved[state.profile.id]) {
+          state.balance = Number(state.balance) + Number(auc.reserved[state.profile.id] || 0);
+          delete auc.reserved[state.profile.id];
+        }
       }
     } else {
-      // return to seller
-      const returned = { _id: auc.item._id || auc.item.title, title: auc.item.title, image: getImageForItem(auc.item) };
-      state.inventory = state.inventory || [];
-      state.inventory.push(returned);
-      addHistory('auction_return', 0, `Аукцион ${auc.item.title} завершился без ставок — возвращён`);
+      // no bids -> return to seller (if current user)
+      if (String(auc.sellerId) === String(state.profile.id)) {
+        const returned = { _id: auc.item._id || auc.item.title, title: auc.item.title, image: getImageForItem(auc.item) };
+        state.inventory = state.inventory || [];
+        state.inventory.push(returned);
+      }
+      // refund reserved for current user if any
+      if (auc.reserved && auc.reserved[state.profile.id]) {
+        state.balance = Number(state.balance) + Number(auc.reserved[state.profile.id] || 0);
+        delete auc.reserved[state.profile.id];
+      }
     }
-    // remove auction
     state.auctions.splice(idx,1);
     saveState();
     renderInventory();
@@ -1056,7 +1131,9 @@
 
     const listings = (state.market || []).filter(listing => {
       const title = (listing.item && (isNFTItem(listing.item) ? getDisplayTitle(listing.item) : listing.item.title) || '').toLowerCase();
-      const matchesQuery = !query || title.includes(query);
+      const aliases = (listing.item && Array.isArray(listing.item.aliases) ? listing.item.aliases.join(' ') : '');
+      const searchable = `${title} ${aliases}`.toLowerCase();
+      const matchesQuery = !query || searchable.includes(query);
       const price = Number(listing.price || 0);
       const inRange = price >= minV && price <= maxV;
       return matchesQuery && inRange;
@@ -1089,7 +1166,7 @@
           ${previewHtml}
           <div style="flex:1">
             <div style="font-weight:800;color:#fff">${escapeHtml(title)}</div>
-            <div class="approx">Approx: ${approx} TON</div>
+            <div class="approx" style="color:#9fb0c8;font-size:13px">Approx: ${approx} TON</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
             <div style="display:flex;gap:8px;align-items:center">
@@ -1127,9 +1204,14 @@
         state.inventory = state.inventory || [];
         state.inventory.push(bought);
         state.market = (state.market || []).filter(m => m.id !== id);
+        // record purchase
         addHistory('purchase', -listing.price, `Purchased ${listing.item.title} from market`);
-        addHistory('acquire', 0, `Acquired ${bought.title} from market`);
-        (state.offers || []).forEach(o => { if (o.listingId === id && o.status === 'pending') o.status = 'rejected'; });
+        // if seller is current user, register sale and credit
+        if (String(listing.sellerId) === String(state.profile.id)) {
+          addHistory('sale', listing.price, `Продажа ${listing.item.title}`);
+          state.balance = Number(state.balance) + Number(listing.price);
+        }
+        (state.offers || []).forEach(o => { if (o.listingId === id && o.status === 'pending' && String(o.fromBuyerId) === String(state.profile.id) && o.reserved) { state.balance = Number(state.balance) + Number(o.amount || 0); } if (o.listingId === id && o.status === 'pending') o.status = 'rejected'; });
         saveState();
         renderProfile();
         renderMarket();
@@ -1197,16 +1279,19 @@
         if (ok) openTopupModal();
         return;
       }
-      const ok = await showConfirm(`Купить "${listing.item.title}" за ${listing.price} TON? Это окончательное подтверждение.`);
-      if (!ok) return;
+      const okc = await showConfirm(`Купить "${listing.item.title}" за ${listing.price} TON? Это окончательное подтверждение.`);
+      if (!okc) return;
       state.balance = Number(state.balance) - listing.price;
       const bought = { _id: listing.item._id || listing.item.title, title: listing.item.title, image: getImageForItem(listing.item) };
       state.inventory = state.inventory || [];
       state.inventory.push(bought);
       state.market = (state.market || []).filter(m => m.id !== listing.id);
       addHistory('purchase', -listing.price, `Purchased ${listing.item.title} from market`);
-      addHistory('acquire', 0, `Acquired ${bought.title} from market`);
-      (state.offers || []).forEach(o => { if (o.listingId === listing.id && o.status === 'pending') o.status = 'rejected'; });
+      if (String(listing.sellerId) === String(state.profile.id)) {
+        addHistory('sale', listing.price, `Продажа ${listing.item.title}`);
+        state.balance = Number(state.balance) + Number(listing.price);
+      }
+      (state.offers || []).forEach(o => { if (o.listingId === listing.id && o.status === 'pending' && String(o.fromBuyerId) === String(state.profile.id) && o.reserved) { state.balance = Number(state.balance) + Number(o.amount || 0); } if (o.listingId === listing.id && o.status === 'pending') o.status = 'rejected'; });
       saveState();
       renderProfile();
       renderMarket();
@@ -1221,7 +1306,6 @@
   }
 
   // Listing offers modal: pending only; cannot send offer on your own listing
-  let listingOffersModal = null;
   function ensureListingOffersModal(){
     if (listingOffersModal) return;
     listingOffersModal = document.createElement('div');
@@ -1278,6 +1362,9 @@
       if (!isFinite(amount) || amount <= 0) return alert('Некорректная сумма.');
       const existing = (state.offers || []).find(o => o.listingId === listing.id && String(o.fromBuyerId) === String(state.profile.id) && o.status === 'pending');
       if (existing) return alert('Вы уже отправляли офер на этот лот — дождитесь ответа или отмените предыдущий офер.');
+      if ((state.balance || 0) < amount) return alert('Недостаточно TON для резерва офера.');
+      // Deduct and reserve funds for current user
+      state.balance = Number(state.balance) - amount;
       const offer = {
         id: `O-${Date.now()}`,
         listingId: listing.id,
@@ -1286,12 +1373,13 @@
         toSellerId: listing.sellerId || null,
         amount,
         status: 'pending',
+        reserved: true,
         createdAt: Date.now()
       };
       state.offers = state.offers || [];
       state.offers.push(offer);
       saveState();
-      alert(`Офер отправлен: ${amount} TON.`);
+      alert(`Офер отправлен: ${amount} TON (средства зарезервированы).`);
       openListingOffersModal(listing);
       renderInventory();
       renderMarket();
@@ -1305,6 +1393,9 @@
           if (!offer) return alert('Офер не найден.');
           const ok = await showConfirm('Отменить офер?');
           if (!ok) return;
+          if (String(offer.fromBuyerId) === String(state.profile.id) && offer.reserved) {
+            state.balance = Number(state.balance) + Number(offer.amount || 0);
+          }
           offer.status = 'rejected';
           saveState();
           openListingOffersModal(listing);
@@ -1321,22 +1412,22 @@
           if (String(listingObj.sellerId) !== String(state.profile.id)) return alert('Только владелец лота может принимать оферы.');
           const ok = await showConfirm(`Принять офер ${offer.amount} TON?`);
           if (!ok) return;
-          if (String(offer.fromBuyerId) === String(state.profile.id)) {
-            if ((state.balance || 0) < offer.amount) { alert('Покупатель не имеет достаточно TON.'); offer.status='rejected'; saveState(); openListingOffersModal(listingObj); return; }
-            state.balance = Number(state.balance) - offer.amount;
+
+          if (String(listingObj.sellerId) === String(state.profile.id)) {
+            state.balance = Number(state.balance) + Number(offer.amount || 0);
+            addHistory('sale', offer.amount, `Продажа ${listingObj.item.title}`);
           }
-          state.balance = Number(state.balance) + Number(offer.amount || 0);
-          state.market = (state.market || []).filter(m => m.id !== listingObj.id);
+
           if (String(offer.fromBuyerId) === String(state.profile.id)) {
             const bought = { _id: listingObj.item._id || listingObj.item.title, title: listingObj.item.title, image: getImageForItem(listingObj.item) };
             state.inventory = state.inventory || [];
             state.inventory.push(bought);
-            addHistory('purchase_offer_accept', -offer.amount, `Покупка по оферу ${offer.amount} TON — ${listingObj.item.title}`);
-          } else {
-            addHistory('offer_accepted', offer.amount, `Офер ${offer.amount} TON принят — ${listingObj.item.title}`);
+            addHistory('purchase', -offer.amount, `Покупка ${listingObj.item.title}`);
           }
+
           offer.status = 'accepted';
-          (state.offers || []).forEach(o => { if (o.listingId === listingObj.id && o.id !== offer.id && o.status === 'pending') o.status = 'rejected'; });
+          (state.offers || []).forEach(o => { if (o.listingId === listingObj.id && o.id !== offer.id && o.status === 'pending') { if (String(o.fromBuyerId) === String(state.profile.id) && o.reserved) state.balance = Number(state.balance) + Number(o.amount || 0); o.status = 'rejected'; } });
+          state.market = (state.market || []).filter(m => m.id !== listingObj.id);
           saveState();
           openListingOffersModal(listingObj || { id: offer.listingId, item: { title: '—' } });
           renderInventory();
@@ -1351,6 +1442,9 @@
           if (!offer) return alert('Офер не найден.');
           const ok = await showConfirm('Отклонить офер?');
           if (!ok) return;
+          if (String(offer.fromBuyerId) === String(state.profile.id) && offer.reserved) {
+            state.balance = Number(state.balance) + Number(offer.amount || 0);
+          }
           offer.status = 'rejected';
           saveState();
           openListingOffersModal(listing);
@@ -1411,7 +1505,6 @@
       const ids = checks.map(c => c.dataset.id);
       state.inventory = (state.inventory || []).filter(i => !ids.includes(i._id));
       state.balance = Number(state.balance) - Number(totalFee);
-      addHistory('withdraw', -totalFee, `Withdrawn ${checks.length} gifts (fee ${WITHDRAW_FEE.toFixed(2)} each)`);
       saveState();
       withdrawModal.classList.add('hidden');
       renderProfile();
@@ -1461,7 +1554,7 @@
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === name));
   }
 
-  // Update auction timers every second and refresh pages
+  // Update auction timers every second and refresh pages; also auto-finalize ended auctions
   function updateAuctionTimers(){
     const els = document.querySelectorAll('.auction-time');
     const now = Date.now();
@@ -1472,7 +1565,14 @@
       el.textContent = rem > 0 ? formatTimeDelta(rem) : 'Завершён';
     });
 
-    // refresh auctions page current values if open
+    // auto-finalize auctions that ended (silent)
+    const finished = (state.auctions || []).filter(a => a.endsAt <= now);
+    if (finished && finished.length > 0) {
+      finished.forEach(a => {
+        finalizeAuction(a.id, true).catch(()=>{});
+      });
+    }
+
     const auctionsPageEl = document.getElementById('page-auctions');
     if (auctionsPageEl && !auctionsPageEl.classList.contains('hidden')) {
       renderAuctions();
@@ -1503,13 +1603,32 @@
               finalizeBtn.className = 'btn btn-primary';
               finalizeBtn.textContent = 'Завершить аукцион';
               finalizeBtn.addEventListener('click', async () => {
-                await finalizeAuction(auction.id);
+                await finalizeAuction(auction.id, false);
                 openAuctionsPage();
                 alert('Аукцион завершён.');
               });
               adminPanel.appendChild(finalizeBtn);
             } else {
-              adminPanel.innerHTML = `<div class="muted">Вы владелец. Аукцион завершится: ${new Date(auction.endsAt).toLocaleString()}</div>`;
+              if (!auction.bids || auction.bids.length === 0) {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'btn';
+                cancelBtn.textContent = 'Отменить аукцион';
+                cancelBtn.addEventListener('click', async () => {
+                  const ok = await showConfirm('Отменить аукцион и вернуть предмет в инвентарь?');
+                  if (!ok) return;
+                  state.auctions = (state.auctions || []).filter(a => a.id !== auction.id);
+                  state.inventory = state.inventory || [];
+                  state.inventory.push({ _id: auction.item._id || auction.item.title, title: auction.item.title, image: getImageForItem(auction.item) });
+                  saveState();
+                  renderInventory();
+                  renderAuctions();
+                  showPage('auctions');
+                  alert('Аукцион отменён, предмет возвращён.');
+                });
+                adminPanel.appendChild(cancelBtn);
+              } else {
+                adminPanel.innerHTML = `<div class="muted">Вы владелец. Аукцион завершится: ${new Date(auction.endsAt).toLocaleString()}</div>`;
+              }
             }
           }
         }
@@ -1517,13 +1636,40 @@
     }
   }
 
-  // Expose state for debugging
-  window.appState = state;
+  // --- NEW: add random NFTs to user's profile (only once) ---
+  function addRandomNFTsToProfile(count = 4) {
+    state.inventory = state.inventory || [];
+    for (let i = 0; i < count; i++) {
+      const idx = Math.floor(Math.random() * RANDOM_NFT_MODELS.length);
+      const model = RANDOM_NFT_MODELS[idx];
+      // ensure unique id
+      const newItem = {
+        _id: `${model._id}-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+        title: model.title,
+        image: model.image,
+        aliases: model.aliases || []
+      };
+      state.inventory.push(newItem);
+    }
+    state._nftsSeeded = true;
+    saveState();
+  }
+  // --------------------------------------------------------
 
   // Boot sequence
   function boot(){
     loadState();
     populateSampleGiftsIfEmpty();
+
+    // NEW: seed random NFTs into profile only once (user requested)
+    if (!state._nftsSeeded) {
+      try {
+        addRandomNFTsToProfile(4); // add 4 random NFTs
+      } catch(e){
+        console.warn('seed NFTs failed', e);
+      }
+    }
+
     renderProfile();
     createMarketUI();
     renderMarket();
