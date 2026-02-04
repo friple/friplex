@@ -3,18 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Небесный клуб</title>
+  <title>kurd Gift</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app" class="app">
-    <div class="garland" aria-hidden="true">
-      <div class="garland-bulb b1"></div><div class="garland-bulb b2"></div><div class="garland-bulb b3"></div><div class="garland-bulb b4"></div>
-    </div>
+    <div class="brand-center" aria-hidden="true">kurd Gift</div>
 
     <header class="topbar">
       <div class="topbar-inner">
-        <h1 id="page-title">Небесный клуб</h1>
+        <h1 id="page-title" style="display:none"> <!-- Оставлен скрытый для совместимости --> </h1>
       </div>
     </header>
 
@@ -59,24 +57,21 @@
             <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
               <button id="topup-btn" class="btn btn-primary">Пополнить звёзды</button>
               <button id="open-withdraw" class="btn withdraw-btn">Вывести подарки</button>
+              <button id="profile-market-btn-send" class="btn listing-action" style="margin-left:8px">Отправить подарок</button>
+              <button id="profile-market-btn" class="btn btn-primary" style="margin-left:8px">Выставленные подарки</button>
             </div>
 
-            <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
-              <button id="subscribe-btn" class="btn">Я подписан в TG (симуляция)</button>
-              <div id="subscribe-indicator" class="muted" style="font-size:13px">Не подписан</div>
-            </div>
-
-            <div class="send-gift-card">
+            <div class="send-gift-card" style="margin-top:12px">
               <div class="send-row">
                 <div>
-                  <div class="muted" style="font-size:12px">Отправить подарок</div>
+                  <div class="muted" style="font-size:12px">Отправить быстрый подарок</div>
                   <div style="font-weight:700">Подарок 15 ⭐ — получатель <span class="accent">@xionzq</span></div>
                 </div>
                 <div>
                   <button id="send15" class="btn btn-primary">Отправить 15 ⭐</button>
                 </div>
               </div>
-              <div class="muted" style="font-size:12px;margin-top:8px">При получении подарка он будет зачислен (симуляция)</div>
+              <div class="muted" style="font-size:12px;margin-top:8px">При получении подарок может быть зачислен в инвентарь бота</div>
             </div>
           </div>
         </div>
@@ -99,7 +94,7 @@
       </section>
     </main>
 
-    <!-- Right floating balance panel -->
+    <!-- Right-top balance panel -->
     <aside id="balance-panel" class="balance-panel" aria-hidden="false">
       <div class="balance-snow">❄️</div>
       <div class="balance-inner">
@@ -196,6 +191,31 @@
           <button id="topup-cancel" class="btn">Отмена</button>
         </div>
         <div id="topup-msg" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- Send gift modal (profile) -->
+    <div id="send-gift-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-content" style="max-width:520px">
+        <button class="modal-close" id="send-gift-close" aria-label="Закрыть">✕</button>
+        <h3 class="highlight-text" style="margin-top:0">Отправить подарок @Xionzq</h3>
+        <p class="muted">Откройте чат с @Xionzq в Telegram и отправьте подарок. После отправки подтвердите ниже и укажите номер подарка (token). Только NFT автоматически появляется в маркет.</p>
+
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+          <button id="open-chat-xion" class="btn btn-primary">Открыть чат @Xionzq</button>
+          <button id="i-sent-gift" class="btn">Я отправил</button>
+        </div>
+
+        <div id="confirm-send-area" style="margin-top:12px;display:none">
+          <label>Номер/токен подарка (пример: LolPop-369710)</label>
+          <input id="sent-gift-token" style="width:100%;padding:8px;border-radius:8px;margin-top:6px;background:#061018;color:#e6eef9;border:1px solid rgba(255,255,255,0.04)" placeholder="Введите token из сообщения..." />
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+            <label style="display:flex;gap:8px;align-items:center"><input id="sent-gift-is-nft" type="checkbox" /> NFT</label>
+            <button id="confirm-add-sent" class="btn btn-primary">Подтвердить и зачислить</button>
+          </div>
+        </div>
+
+        <div id="send-gift-msg" style="margin-top:10px"></div>
       </div>
     </div>
 
