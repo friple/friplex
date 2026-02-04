@@ -1,11 +1,12 @@
 (() => {
   const STORAGE_KEY = 'miniapp_v4_4_state';
-  // default state (added lastFreeSpin and profile.subscribed)
+  // default state (added lastFreeSpin, profile.subscribed and market)
   let state = {
     balance: 999999,
     inventory: [],
     history: [],
     spins: [],
+    market: [], // marketplace listings
     profile: { name: 'Пользователь', tgnick: '@yourtg', id: '000000', subscribed: false },
     lastFreeSpin: 0
   };
@@ -17,14 +18,64 @@
     rnft: { id:'rnft', prize:'NFT', spinCost:200, sticker:{id:'lollipop', emoji:'🍭', title:'Леденец (NFT)', price:200} }
   };
 
-  // DOM
+  // Inject stronger dark theme + brighter buttons styling and visibility improvements
+  (function injectTheme() {
+    const css = `
+      /* App-wide dark theme */
+      body, .app, .page, .card, .modal-content { background: #070708 !important; color: #e6eef9 !important; }
+      .topbar { background: transparent !important; }
+      .page { background: transparent !important; }
+      .card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)) !important; border: 1px solid rgba(255,255,255,0.04) !important; box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
+      .btn { background: rgba(255,255,255,0.04); color: #e6eef9; border: 1px solid rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 12px; cursor: pointer; transition: transform .08s, box-shadow .12s; font-weight:700; }
+      .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.6); }
+      .btn:active { transform: translateY(0); }
+      .btn-primary { background: linear-gradient(90deg,#00a3ff,#6a8bff); color: #021022; border: none; box-shadow: 0 8px 20px rgba(0,160,255,0.12); }
+      .btn-primary:hover { box-shadow: 0 12px 30px rgba(0,160,255,0.18); }
+      .nav-btn { padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.02); color: #cfe8ff; border: none; }
+      .nav-btn.active { background: linear-gradient(90deg,#0ea5ff22,#7c3aed22); box-shadow: 0 8px 20px rgba(0,0,0,0.6) inset; }
+      .inventory-item, .market-card { background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.008)); border: 1px solid rgba(255,255,255,0.03); }
+      .modal { background: rgba(0,0,0,0.6) !important; }
+      .modal-content { background: linear-gradient(180deg,#071018,#041018) !important; border-radius: 14px; padding: 14px; color: #e6eef9; }
+      input, .topup-btn, .topup-grid button { background: #071018; color: #e6eef9; border: 1px solid rgba(255,255,255,0.04); padding:8px; border-radius:8px; }
+      #market-search { border:1px solid rgba(255,255,255,0.04); }
+      .market-grid .market-card { transition: transform .12s; }
+      .market-grid .market-card:hover { transform: translateY(-6px); box-shadow: 0 18px 40px rgba(0,0,0,0.6); }
+      .win-popup { background: linear-gradient(180deg,#061018,#021018); color: #e6eef9; border-radius: 12px; padding: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.06) }
+      .market-buy, .market-view, .sell-btn, .listing-action { padding:8px 12px; border-radius:10px; font-weight:700; }
+      .market-buy { background: linear-gradient(90deg,#00e6a8,#00a3ff); color:#021022; border:none; }
+      .market-buy:hover { box-shadow: 0 12px 30px rgba(0,160,200,0.12); }
+      .sell-btn { background: linear-gradient(90deg,#ffcf4d,#ff7a7a); color:#021022; border:none; }
+      .listing-action { background: linear-gradient(90deg,#7c3aed,#00a3ff); color:#fff; border:none; }
+      .price-range { display:flex; gap:8px; align-items:center; }
+      .price-range input { width:100px; }
+      #balance-panel { background: linear-gradient(180deg,#0b1620,#051019); color: #f7fbff !important; border-radius:12px; padding:10px 14px; }
+      .muted { color:#9fb0c8 !important; }
+      .highlight-text { color: #fff9c4 !important; text-shadow: 0 2px 8px rgba(124,58,237,0.2); font-weight:800; }
+      .market-grid { max-height: 420px; overflow:auto; padding:8px; }
+      .market-card { min-height: 110px; display:flex; flex-direction:column; justify-content:space-between; }
+      .market-card .seller { color:#9fb0c8; font-size:12px; }
+      .profile-info .btn#profile-market-btn { margin-top:8px; background: linear-gradient(90deg,#00e6a8,#00a3ff); color:#021022; border:none; }
+      .listing-modal .modal-content, .modal.listing-modal .modal-content { max-width:480px; }
+      .mylist-modal .modal-content { max-width:640px; }
+      .market-card .price-badge { font-weight:900; color:#bfe8ff; background: linear-gradient(90deg,#042233,#053042); padding:8px 12px; border-radius:12px; }
+      /* ensure text contrast for small elements */
+      .history-item .history-left, .inventory-item .label { color:#e6eef9; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+    `;
+    const st = document.createElement('style');
+    st.setAttribute('id','injected-theme');
+    st.appendChild(document.createTextNode(css));
+    document.head.appendChild(st);
+  })();
+
+  // DOM refs (some elements are created later)
   const pages = {
     main: document.getElementById('page-main'),
     roulette: document.getElementById('page-roulette'),
     profile: document.getElementById('page-profile'),
     history: document.getElementById('page-history')
   };
-  const navBtns = Array.from(document.querySelectorAll('.nav-btn'));
+  const nav = document.querySelector('.bottom-nav');
+  let navBtns = Array.from(document.querySelectorAll('.nav-btn'));
   const balanceInline = document.getElementById('balance-inline');
   const balanceField = document.getElementById('balance');
   const rightBalance = document.getElementById('balance-right');
@@ -45,7 +96,6 @@
   const winPopup = document.getElementById('win-popup');
   const winSticker = document.getElementById('win-sticker');
   const winText = document.getElementById('win-text');
-  // buttons inside win popup exist in markup: #win-keep and #win-spin
 
   // free spin UI
   const freeSpinBtn = document.getElementById('free-spin-btn');
@@ -99,6 +149,7 @@
         Object.assign(state, parsed);
         if (!state.profile) state.profile = { name: 'Пользователь', tgnick: '@yourtg', id: '000000', subscribed: false };
         if (!('lastFreeSpin' in state)) state.lastFreeSpin = 0;
+        if (!Array.isArray(state.market)) state.market = [];
       }
     } catch(e){ console.warn('loadState', e); }
   }
@@ -148,6 +199,7 @@
 
   // get current rotation degrees of canvas
   function getCurrentRotationDeg(){
+    if (!canvas) return 0;
     const st = window.getComputedStyle(canvas);
     const tr = st.transform || st.webkitTransform || 'none';
     if (tr === 'none') return 0;
@@ -199,19 +251,266 @@
     return 'nothing';
   }
 
+  // MARKET UI creation and search/filters
+  function createMarketUI(){
+    // if market nav button already exists skip
+    if (nav && !document.querySelector('[data-page="market"]')) {
+      const marketBtn = document.createElement('button');
+      marketBtn.className = 'nav-btn';
+      marketBtn.dataset.page = 'market';
+      marketBtn.textContent = 'Маркет';
+      nav.appendChild(marketBtn);
+      navBtns = Array.from(document.querySelectorAll('.nav-btn')); // refresh
+      marketBtn.addEventListener('click', ()=> showPage('market'));
+    }
+
+    // create market page if not present
+    if (!document.getElementById('page-market')) {
+      const app = document.getElementById('app');
+      if (!app) return;
+      const marketPage = document.createElement('main');
+      marketPage.className = 'page hidden';
+      marketPage.id = 'page-market';
+      marketPage.innerHTML = `
+        <section class="market card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="margin:0" class="highlight-text">Маркет</h3>
+            <div style="font-size:13px;color:#cfe8ff">Баланс: <strong id="market-balance-display"></strong></div>
+          </div>
+          <div style="margin-bottom:10px;color:#a8b7c9">Просматривайте выставленные подарки, покупайте их, или выставляйте свои из профиля.</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <input id="market-search" placeholder="Поиск..." style="flex:1;padding:8px;border-radius:8px;border:none;background:#061018;color:#e6eef9" />
+            <div class="price-range">
+              <input id="market-min" type="number" placeholder="min ⭐" style="padding:8px;border-radius:8px;border:none;background:#061018;color:#e6eef9" />
+              <input id="market-max" type="number" placeholder="max ⭐" style="padding:8px;border-radius:8px;border:none;background:#061018;color:#e6eef9" />
+            </div>
+            <button id="market-refresh" class="btn">Обновить</button>
+          </div>
+          <div id="market-list" class="market-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:8px;max-height:420px;overflow:auto"></div>
+        </section>
+      `;
+      app.appendChild(marketPage);
+      pages.market = marketPage;
+    }
+  }
+
+  function renderMarket(){
+    const marketList = document.getElementById('market-list');
+    const balDisp = document.getElementById('market-balance-display');
+    if (balDisp) balDisp.textContent = `${state.balance} ⭐`;
+    if (!marketList) return;
+    const qEl = document.getElementById('market-search');
+    const minEl = document.getElementById('market-min');
+    const maxEl = document.getElementById('market-max');
+    const query = qEl ? qEl.value.trim().toLowerCase() : '';
+    const minV = minEl && Number(minEl.value) ? Number(minEl.value) : 0;
+    const maxV = maxEl && Number(maxEl.value) ? Number(maxEl.value) : Number.MAX_SAFE_INTEGER;
+
+    const listings = (state.market || []).filter(listing => {
+      const title = (listing.item && listing.item.title || '').toLowerCase();
+      const matchesQuery = !query || title.includes(query);
+      const price = Number(listing.price || 0);
+      const inRange = price >= minV && price <= maxV;
+      return matchesQuery && inRange;
+    });
+
+    marketList.innerHTML = '';
+    if (!listings || listings.length === 0) {
+      marketList.innerHTML = `<div class="muted">В маркетплейсе пока нет подходящих подарков.</div>`;
+      return;
+    }
+    listings.forEach(listing => {
+      const el = document.createElement('div');
+      el.className = 'market-card';
+      el.style.background = 'linear-gradient(180deg,#061018,#041018)';
+      el.style.border = '1px solid rgba(255,255,255,0.04)';
+      el.style.borderRadius = '12px';
+      el.style.padding = '10px';
+      el.style.display = 'flex';
+      el.style.flexDirection = 'column';
+      el.style.gap = '8px';
+      el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:56px;height:56px;border-radius:10px;background:linear-gradient(180deg,#071827,#04202a);display:flex;align-items:center;justify-content:center;font-size:28px">${listing.item.emoji}</div>
+          <div style="flex:1">
+            <div style="font-weight:700;color:#fff">${listing.item.title}</div>
+            <div class="seller" style="font-size:12px;color:#9fb0c8">Продавец: ${listing.seller || '—'}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto">
+          <div class="price-badge">${listing.price} ⭐</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn market-buy market-buy-visible" data-id="${listing.id}">Купить</button>
+            <button class="btn market-view" data-id="${listing.id}">Просмотр</button>
+          </div>
+        </div>
+      `;
+      marketList.appendChild(el);
+    });
+
+    // attach buy handlers
+    marketList.querySelectorAll('.market-buy').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const listing = (state.market || []).find(m => m.id === id);
+        if (!listing) return alert('Листинг не найден.');
+        if ((state.balance || 0) < listing.price) {
+          const ok = await showConfirm(`У вас ${state.balance} ⭐ — недостаточно для покупки (${listing.price} ⭐). Открыть пополнение?`);
+          if (ok) openTopupModal();
+          return;
+        }
+        const ok1 = await showConfirm(`Купить "${listing.item.title}" за ${listing.price} ⭐ у ${listing.seller || 'продавца'}?`);
+        if (!ok1) return;
+        const ok2 = await showConfirm('Это окончательное подтверждение покупки — списание произойдёт сразу. Продолжить?');
+        if (!ok2) return;
+        // perform purchase
+        state.balance = (state.balance || 0) - listing.price;
+        const bought = Object.assign({}, listing.item, { _id: `${Date.now()}_${Math.random().toString(36).slice(2,9)}`, fromMarket: true });
+        state.inventory = state.inventory || [];
+        state.inventory.push(bought);
+        state.market = (state.market || []).filter(m => m.id !== id);
+        addHistory('purchase', -listing.price, `Purchased ${listing.item.title} from ${listing.seller || 'market'}`);
+        addHistory('acquire', 0, `Acquired ${bought.title} from market`);
+        saveState();
+        renderProfile();
+        renderMarket();
+        spawnConfetti(12);
+        alert('Покупка прошла успешно — подарок добавлен в инвентарь.');
+      });
+    });
+
+    marketList.querySelectorAll('.market-view').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const listing = (state.market || []).find(m => m.id === id);
+        if (!listing) return alert('Листинг не найден.');
+        alert(`${listing.item.title}\nЦена: ${listing.price} ⭐\nПродавец: ${listing.seller || '—'}`);
+      });
+    });
+  }
+
+  // helper to suggest price based on same-title listings (average) or fallback
+  function suggestPriceForItem(item){
+    const same = (state.market || []).filter(m => m.item && m.item.title === item.title);
+    if (same.length === 0) return Math.max(1, item.price || 100);
+    const avg = Math.round(same.reduce((s,x)=>s + Number(x.price||0),0) / same.length);
+    return Math.max(1, avg);
+  }
+
+  // Add "Выставленные подарки" button to profile (shows only user's listings)
+  function ensureProfileMarketButton(){
+    const profileBlock = document.querySelector('.profile-info') || document.querySelector('.profile-block');
+    if (!profileBlock) return;
+    if (document.getElementById('profile-market-btn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'profile-market-btn';
+    btn.className = 'btn btn-primary';
+    btn.textContent = 'Выставленные подарки';
+    btn.style.marginLeft = '8px';
+    // place near topup button area
+    const container = profileBlock.querySelector('div[style*="margin-top:12px"]') || profileBlock;
+    container.appendChild(btn);
+    btn.addEventListener('click', () => openMyListingsModal());
+  }
+
+  // my listings modal
+  let myListingsModal = null;
+  function ensureMyListingsModal(){
+    if (myListingsModal) return;
+    myListingsModal = document.createElement('div');
+    myListingsModal.className = 'modal mylist-modal hidden';
+    myListingsModal.style.zIndex = 10000;
+    myListingsModal.innerHTML = `
+      <div class="modal-content" style="max-width:640px">
+        <button class="modal-close" id="mylist-close" aria-label="Закрыть">✕</button>
+        <h3 style="margin-top:0" class="highlight-text">Мои выставленные подарки</h3>
+        <div id="mylist-body" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;margin-top:12px"></div>
+      </div>
+    `;
+    document.body.appendChild(myListingsModal);
+    myListingsModal.querySelector('#mylist-close').addEventListener('click', ()=> myListingsModal.classList.add('hidden'));
+  }
+
+  // refresh modal content (used after delist)
+  function refreshMyListingsModalContent(){
+    ensureMyListingsModal();
+    const body = myListingsModal.querySelector('#mylist-body');
+    body.innerHTML = '';
+    const mine = (state.market || []).filter(m => String(m.sellerId || '') === String(state.profile && state.profile.id || ''));
+    if (!mine || mine.length === 0) {
+      body.innerHTML = `<div class="muted">У вас нет выставленных подарков.</div>`;
+      return;
+    }
+    mine.forEach(l => {
+      const row = document.createElement('div');
+      row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center';
+      row.style.padding='8px'; row.style.borderBottom='1px solid rgba(255,255,255,0.03)'; row.style.borderRadius='8px';
+      row.innerHTML = `<div style="display:flex;align-items:center;gap:10px"><div style="font-size:26px">${l.item.emoji}</div>
+        <div><div style="font-weight:700;color:#fff">${l.item.title}</div><div style="font-size:12px;color:#9fb0c8">${l.price} ⭐</div></div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn listing-action delist-btn" data-id="${l.id}">Снять с продажи</button>
+        </div>`;
+      body.appendChild(row);
+    });
+    // attach handlers
+    body.querySelectorAll('.delist-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const ok = await showConfirm('Вы уверены, что хотите снять этот лот с продажи и вернуть его в инвентарь?');
+        if (!ok) return;
+        const idx = (state.market || []).findIndex(x => x.id === id);
+        if (idx >= 0) {
+          const listing = state.market.splice(idx,1)[0];
+          // return item to inventory (new id)
+          const item = Object.assign({}, listing.item, { _id: `${Date.now()}_${Math.random().toString(36).slice(2,9)}` });
+          state.inventory = state.inventory || [];
+          state.inventory.push(item);
+          addHistory('delist', 0, `Delisted ${listing.item.title}`);
+          saveState();
+          renderProfile();
+          renderMarket();
+          // refresh modal content and if none left, show message
+          refreshMyListingsModalContent();
+          alert('Лот снят с продажи и возвращён в инвентарь.');
+        }
+      });
+    });
+  }
+
+  function openMyListingsModal(){
+    ensureMyListingsModal();
+    refreshMyListingsModalContent();
+    myListingsModal.classList.remove('hidden');
+  }
+
   // init
   loadState();
+  createMarketUI();
+  ensureProfileMarketButton();
   renderProfile();
   renderHistory();
-  // стартовая страница: рулетка (удалена секция "Задания" из HTML)
+  renderMarket();
+  // стартовая страница: рулетка
   showPage('roulette');
   if (modal) modal.classList.add('hidden');
   if (canvas) canvas.style.transform = 'rotate(0deg)';
 
+  // attach nav buttons (refresh list)
+  navBtns = Array.from(document.querySelectorAll('.nav-btn'));
   navBtns.forEach(b => b.addEventListener('click', ()=> showPage(b.dataset.page)));
   if (goRoulette) goRoulette.addEventListener('click', ()=> showPage('roulette'));
 
-  // speed
+  // market filters interactions (if present)
+  const marketSearch = document.getElementById('market-search');
+  const marketMin = document.getElementById('market-min');
+  const marketMax = document.getElementById('market-max');
+  const marketRefresh = document.getElementById('market-refresh');
+  if (marketSearch) marketSearch.addEventListener('input', () => renderMarket());
+  if (marketMin) marketMin.addEventListener('change', () => renderMarket());
+  if (marketMax) marketMax.addEventListener('change', () => renderMarket());
+  if (marketRefresh) marketRefresh.addEventListener('click', () => renderMarket());
+
+  // speed buttons
   speedButtons.forEach(btn => {
     btn.addEventListener('click', (e) => {
       speedButtons.forEach(b => b.classList.remove('active'));
@@ -220,7 +519,7 @@
     });
   });
 
-  // Top-up handlers (unchanged)
+  // Top-up handlers
   if (topupBtn) topupBtn.addEventListener('click', openTopupModal);
   if (topupClose) topupClose.addEventListener('click', ()=> topupModal.classList.add('hidden'));
   if (topupCancel) topupCancel.addEventListener('click', ()=> topupModal.classList.add('hidden'));
@@ -233,7 +532,7 @@
         topupAmounts.querySelectorAll('.topup-btn').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         selectedTopup = Number(b.dataset.amount);
-        topupMsg.textContent = `Выбрано: ${selectedTopup} ⭐`;
+        topupMsg.textContent = `Выбран��: ${selectedTopup} ⭐`;
       });
     });
   }
@@ -288,7 +587,7 @@
     saveState();
   }
 
-  // send single 15⭐ quick action
+  // quick send 15
   if (send15Btn) {
     send15Btn.addEventListener('click', () => {
       const gift = 15;
@@ -309,7 +608,7 @@
     });
   }
 
-  // Subscribe toggle (simulation)
+  // Subscribe toggle
   if (subscribeBtn) {
     subscribeBtn.addEventListener('click', () => {
       state.profile = state.profile || {};
@@ -353,9 +652,9 @@
         row.style.alignItems = 'center';
         row.style.gap = '8px';
         row.style.padding = '8px';
-        row.style.borderBottom = '1px solid #f0f6ff';
+        row.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
         row.innerHTML = `<input type="checkbox" data-id="${it._id}"> <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center">${it.emoji}</div>
-          <div style="flex:1"><div style="font-weight:700">${it.title}</div><div style="font-size:12px;color:#6f8fa0">Цена: ${it.price} ⭐</div></div>`;
+          <div style="flex:1"><div style="font-weight:700;color:#fff">${it.title}</div><div style="font-size:12px;color:#9fb0c8">Цена: ${it.price} ⭐</div></div>`;
         withdrawList.appendChild(row);
       });
     }
@@ -409,7 +708,9 @@
     Object.values(pages).forEach(p => p && p.classList.add('hidden'));
     if (!pages[name]) return;
     pages[name].classList.remove('hidden');
+    navBtns = Array.from(document.querySelectorAll('.nav-btn'));
     navBtns.forEach(b => b.classList.toggle('active', b.dataset.page === name));
+    if (name === 'market') renderMarket();
   }
 
   // render profile + inventory
@@ -428,11 +729,29 @@
       state.inventory.forEach((item) => {
         const card = document.createElement('div');
         card.className = 'inventory-item';
-        const emoji = document.createElement('div'); emoji.className = 'sticker-emoji'; emoji.textContent = item.emoji || '🎁';
-        card.appendChild(emoji);
+        card.style.background = 'linear-gradient(180deg,#041018,#021018)';
+        card.style.border = '1px solid rgba(255,255,255,0.03)';
+        card.style.borderRadius = '10px';
+        card.style.padding = '10px';
+        card.style.display = 'flex';
+        card.style.alignItems = 'center';
+        card.style.justifyContent = 'space-between';
+        const left = document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='12px';
+        const emoji = document.createElement('div'); emoji.className = 'sticker-emoji'; emoji.textContent = item.emoji || '🎁'; emoji.style.fontSize='28px';
+        left.appendChild(emoji);
+        const info = document.createElement('div');
+        info.style.flex='1';
         const label = document.createElement('div'); label.className = 'label'; label.textContent = item.title || '';
+        label.style.fontWeight = '700';
+        label.style.color = '#fff';
         const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = `Цена: ${item.price} ⭐`;
-        const sell = document.createElement('button'); sell.className = 'sell-btn'; sell.textContent = `Продать за ${item.price} ⭐`;
+        sub.style.fontSize='12px'; sub.style.color='#9fb0c8';
+        info.appendChild(label);
+        info.appendChild(sub);
+        left.appendChild(info);
+
+        const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px';
+        const sell = document.createElement('button'); sell.className = 'sell-btn'; sell.textContent = `Продать: ${item.price} ⭐`;
         sell.addEventListener('click', async () => {
           const ok = await showConfirm(`Вы точно хотите продать "${item.title}" за ${item.price} ⭐?`);
           if (!ok) return;
@@ -446,9 +765,16 @@
             spawnConfetti(10);
           }
         });
-        card.appendChild(label);
-        card.appendChild(sub);
-        card.appendChild(sell);
+        // new: list on market button (bright)
+        const listBtn = document.createElement('button');
+        listBtn.className = 'btn listing-action';
+        listBtn.textContent = 'Выставить';
+        listBtn.addEventListener('click', () => openListModalForItem(item));
+        actions.appendChild(sell);
+        actions.appendChild(listBtn);
+
+        card.appendChild(left);
+        card.appendChild(actions);
         invGrid.appendChild(card);
       });
     }
@@ -456,6 +782,87 @@
     // update subscribe/free spin UI after render
     updateSubscribeUI();
     updateFreeSpinStatus();
+  }
+
+  // Listing modal flow
+  let listModalEl = null;
+  function ensureListModal(){
+    if (listModalEl) return;
+    listModalEl = document.createElement('div');
+    listModalEl.className = 'modal listing-modal hidden';
+    listModalEl.style.zIndex = 10000;
+    listModalEl.innerHTML = `
+      <div class="modal-content" style="max-width:480px">
+        <button class="modal-close" id="list-close" aria-label="Закрыть">✕</button>
+        <h3 id="list-title" class="highlight-text">Выставить подарок</h3>
+        <div id="list-body"></div>
+      </div>
+    `;
+    document.body.appendChild(listModalEl);
+    document.getElementById('list-close').addEventListener('click', ()=> listModalEl.classList.add('hidden'));
+  }
+
+  async function openListModalForItem(item){
+    ensureListModal();
+    const body = listModalEl.querySelector('#list-body');
+    body.innerHTML = '';
+    // suggested price should not limit the user; allow up to 1_000_000
+    const suggested = suggestPriceForItem(item);
+    body.innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">
+        <div style="font-size:40px">${item.emoji}</div>
+        <div>
+          <div style="font-weight:700;color:#fff">${item.title}</div>
+          <div style="font-size:12px;color:#9fb0c8">Исходная цена: ${item.price} ⭐</div>
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:13px;display:block;margin-bottom:6px">Предлагаемая цена (1 - 1 000 000 ⭐)</label>
+        <input id="list-price-input" type="number" value="${suggested}" min="1" max="1000000" style="width:100%;padding:10px;border-radius:10px;border:none;background:#061018;color:#e6eef9" />
+      </div>
+      <div style="margin-bottom:12px;color:#9fb0c8">Рекомендованная цена: ${suggested} ⭐</div>
+      <div style="display:flex;gap:8px">
+        <button id="list-confirm" class="btn btn-primary">Выставить</button>
+        <button id="list-cancel" class="btn">Отмена</button>
+      </div>
+    `;
+    listModalEl.classList.remove('hidden');
+
+    const input = listModalEl.querySelector('#list-price-input');
+    const confirmBtn = listModalEl.querySelector('#list-confirm');
+    const cancelBtn = listModalEl.querySelector('#list-cancel');
+
+    cancelBtn.addEventListener('click', () => listModalEl.classList.add('hidden'), { once: true });
+
+    confirmBtn.addEventListener('click', async () => {
+      const val = Number(input.value) || 0;
+      if (val < 1 || val > 1000000) {
+        alert('Цена должна быть в диапазоне от 1 до 1 000 000 ⭐');
+        return;
+      }
+      const ok1 = await showConfirm(`Вы точно хотите выставить "${item.title}" на маркет за ${val} ⭐?`);
+      if (!ok1) return;
+      const ok2 = await showConfirm('Это окончательное подтверждение — после подтверждения подарок будет снят с вашего инвентаря и появится в маркете. Продолжить?');
+      if (!ok2) return;
+      // perform listing: remove from inventory, add to market array
+      const idx = (state.inventory || []).findIndex(x => x._id === item._id);
+      if (idx >= 0) state.inventory.splice(idx, 1);
+      const listing = {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
+        item: { title: item.title, emoji: item.emoji, price: item.price },
+        price: val,
+        sellerId: state.profile && state.profile.id,
+        seller: (state.profile && (state.profile.tgnick || state.profile.name)) || 'Продавец'
+      };
+      state.market = state.market || [];
+      state.market.unshift(listing);
+      addHistory('list', 0, `Listed ${item.title} for ${val} ⭐`);
+      saveState();
+      renderProfile();
+      renderMarket();
+      listModalEl.classList.add('hidden');
+      alert('Подарок успешно выставлен в маркет.');
+    }, { once: true });
   }
 
   function renderHistory(){
@@ -483,7 +890,6 @@
   const rouletteCards = Array.from(document.querySelectorAll('.card-roulette'));
   rouletteCards.forEach(card => {
     card.addEventListener('click', () => {
-      // add selected class visually
       rouletteCards.forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
       const type = card.dataset.type;
@@ -575,35 +981,30 @@
     ctx.fillText('Пусто', emptyX, emptyY + 6);
   }
 
-  // speed config to mapping: duration & easing
+  // speed config
   const speedConfig = {
     fast: { duration: 1200, easing: easeOutCubic },
     medium: { duration: 2400, easing: easeOutQuart },
     slow: { duration: 3800, easing: easeOutQuint }
   };
 
-  // new smooth spin using animateRotation (original)
+  // spin animator
   async function spinToHalfAnimation(forceWin = null){
     const cfg = speedConfig[spinMode] || speedConfig.medium;
     const r = roulettes[currentType];
-    // record spend
-    addHistory('spend', -r.spinCost, `Spin ${currentType}`);
     const winWhite = (typeof forceWin === 'boolean') ? forceWin : (Math.random() < 0.5);
-    const turns = 6 + Math.floor(Math.random()*6); // more turns for spectacle
+    const turns = 6 + Math.floor(Math.random()*6);
     const base = turns * 360;
     const target = winWhite ? 0 : 180;
     const jitter = (Math.random()*18)-9;
     const finalAngle = base + target + jitter;
 
-    // save spin record
-    addSpinRecord({ rouletteId: currentType, speed: spinMode, cost: r.spinCost, outcome: winWhite ? 'white' : 'black', prize: r.prize });
+    addSpinRecord({ rouletteId: currentType, speed: spinMode, cost: 0, outcome: winWhite ? 'white' : 'black', prize: r ? r.prize : null });
 
-    // cancel any CSS transition, use our animator
     if (canvas) canvas.style.transition = 'none';
     animCancel = false;
     const ok = await animateRotation(finalAngle, cfg.duration, cfg.easing);
 
-    // small bounce: animate a tiny back-and-forth for realism
     if (ok) {
       await animateRotation(finalAngle - (Math.random()*8 + 4), 180, easeOutCubic);
       await animateRotation(finalAngle, 160, easeOutCubic);
@@ -613,15 +1014,13 @@
     return winWhite ? 'white' : 'black';
   }
 
-  // spin free with defined odds (does NOT charge)
+  // spin free with odds
   async function spinFreeWithOdds(type){
-    // animate similarly but do not charge
     const cfg = speedConfig[spinMode] || speedConfig.medium;
     const turns = 5 + Math.floor(Math.random()*6);
     const base = turns * 360;
-    // determine prize using odds
-    const prize = sampleFreePrize(); // 'nothing'|'stars'|'nft'
-    const target = (prize === 'nothing') ? 180 : 0; // win -> white, nothing -> black
+    const prize = sampleFreePrize();
+    const target = (prize === 'nothing') ? 180 : 0;
     const jitter = (Math.random()*18)-9;
     const finalAngle = base + target + jitter;
 
@@ -640,7 +1039,7 @@
     return prize;
   }
 
-  // click to spin: canvas click triggers same as button
+  // canvas click triggers spin
   if (canvas) {
     canvas.addEventListener('click', ()=> {
       const type = spinAction && spinAction.dataset.type;
@@ -648,15 +1047,28 @@
     });
   }
 
-  // original paid spin handler
+  // improved paid spin handler: check balance, deduct once, then animate + handle result and ensure modal closes after result
   if (spinAction) {
     spinAction.addEventListener('click', async () => {
       const type = spinAction.dataset.type;
       const r = roulettes[type];
       if (!r) return;
+      if (spinAction.disabled) return;
       spinAction.disabled = true;
       if (modalResult) modalResult.textContent = '';
       hideWinPopup();
+
+      if ((state.balance || 0) < r.spinCost) {
+        const ok = await showConfirm(`У вас ${state.balance} ⭐ — недостаточно для прокрутки (${r.spinCost} ⭐). Открыть окно пополнения?`);
+        spinAction.disabled = false;
+        if (ok) openTopupModal();
+        return;
+      }
+      // deduct immediately and persist
+      state.balance = (state.balance || 0) - r.spinCost;
+      addHistory('spend', -r.spinCost, `Spin ${type}`);
+      saveState();
+      renderProfile();
 
       try {
         const which = await spinToHalfAnimation();
@@ -674,6 +1086,7 @@
   }
 
   async function handleSpinResult(type, r, which){
+    // always close modal after handling result to keep UI clean
     if (which === 'white') {
       const item = {
         _id: `${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
@@ -700,28 +1113,31 @@
       spawnConfetti();
 
       const userChoice = await waitForWinChoiceWithTimeout(6000);
+      hideWinPopup();
+      // close modal and go either to profile or remain on roulette
+      closeModal();
       if (userChoice === 'open_inventory') {
-        hideWinPopup();
         showPage('profile');
       } else {
-        hideWinPopup();
-        await delay(220);
-        await resetToZero();
+        showPage('roulette');
       }
+      await delay(220);
+      await resetToZero();
     } else {
       if (modalResult) {
         modalResult.textContent = 'Увы — ничего не выиграли.';
         modalResult.className = 'modal-result fail';
       }
       await delay(900);
+      hideWinPopup();
+      closeModal();
       await resetToZero();
     }
   }
 
-  // handler for free spin result (odds: nothing/stars/nft)
+  // free spin result handling (also closes modal)
   async function handleFreeSpinResult(type, outcome){
     if (outcome === 'nft') {
-      // award NFT lollipop
       const r = roulettes['rnft'];
       const item = {
         _id: `${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
@@ -739,14 +1155,11 @@
       if (modalResult) { modalResult.textContent = 'Вы получили NFT — леденец!'; modalResult.className = 'modal-result success'; }
       spawnConfetti();
       const userChoice = await waitForWinChoiceWithTimeout(6000);
-      if (userChoice === 'open_inventory') {
-        hideWinPopup();
-        showPage('profile');
-      } else {
-        hideWinPopup();
-        await delay(220);
-        await resetToZero();
-      }
+      hideWinPopup();
+      closeModal();
+      if (userChoice === 'open_inventory') showPage('profile'); else showPage('roulette');
+      await delay(220);
+      await resetToZero();
     } else if (outcome === 'stars') {
       const amount = 25;
       state.balance = (state.balance || 0) + amount;
@@ -756,10 +1169,12 @@
       if (modalResult) { modalResult.textContent = `Поздравляем! Вы выиграли ${amount} ⭐`; modalResult.className = 'modal-result success'; }
       spawnConfetti();
       await delay(900);
+      closeModal();
       await resetToZero();
     } else {
       if (modalResult) { modalResult.textContent = 'Увы — ничего не выиграли.'; modalResult.className = 'modal-result fail'; }
       await delay(900);
+      closeModal();
       await resetToZero();
     }
   }
@@ -767,7 +1182,6 @@
   // free spin button logic
   if (freeSpinBtn) {
     freeSpinBtn.addEventListener('click', async () => {
-      // must be subscribed
       state.profile = state.profile || {};
       if (!state.profile.subscribed) {
         const ok = await showConfirm('Бесплатная прокрутка доступна только подписанным. Симулировать подписку?');
@@ -779,21 +1193,17 @@
       const now = Date.now();
       const elapsed = now - (state.lastFreeSpin || 0);
       if (elapsed < FREE_SPIN_COOLDOWN) {
-        // not ready
         updateFreeSpinStatus();
         return;
       }
-      // use free spin
       state.lastFreeSpin = Date.now();
       saveState();
       updateFreeSpinStatus();
-      // pick roulette to spin: current selected or default r1
       const type = currentType || 'r1';
       openModal(type);
       if (modalResult) modalResult.textContent = '';
       hideWinPopup();
       drawStaticWheel(roulettes[type]);
-      // animate free spin with odds
       freeSpinBtn.disabled = true;
       try {
         const outcome = await spinFreeWithOdds(type);
@@ -823,12 +1233,15 @@
       const hrs = Math.floor(left / (60*60*1000));
       const mins = Math.floor((left % (60*60*1000)) / (60*1000));
       const secs = Math.floor((left % (60*1000)) / 1000);
-      freeSpinStatus.textContent = `Доступно через ${hrs}ч ${mins}м ${secs}с`;
+      const hh = String(hrs).padStart(2,'0');
+      const mm = String(mins).padStart(2,'0');
+      const ss = String(secs).padStart(2,'0');
+      freeSpinStatus.textContent = `Доступно через ${hh}ч ${mm}м ${ss}с`;
       freeSpinBtn.disabled = true;
     }
   }
 
-  // show/hide win popup, and wait for clicks (fixed handlers)
+  // show/hide win popup and wait for user
   function showWinPopup(r){
     if (winAutoKeepTimer) { clearTimeout(winAutoKeepTimer); winAutoKeepTimer = null; }
     winSticker && (winSticker.textContent = (r && r.sticker && r.sticker.emoji) || '🎁');
@@ -869,7 +1282,6 @@
   }
 
   async function resetToZero(){
-    // smooth reset using animator
     animCancel = false;
     await animateRotation(0, 700, easeOutQuart);
     drawStaticWheel(roulettes[currentType]);
@@ -891,7 +1303,7 @@
     if (!confetti) return;
     confetti.innerHTML = '';
     confetti.setAttribute('aria-hidden','false');
-    const colors = ['#ff6b6b','#ffd93d','#6be4ff','#8affc1','#a38bff','#ff9ec0','#9be6ff','#60b7ff'];
+    const colors = ['#00e6a8','#00a3ff','#7c3aed','#ffcf4d','#ff7a7a','#9be6ff','#60b7ff','#8affc1'];
     for (let i=0;i<n;i++){
       const el = document.createElement('div');
       el.className = 'p';
@@ -921,30 +1333,44 @@
   // custom confirm modal (returns Promise<boolean>)
   function showConfirm(message){
     return new Promise(resolve => {
-      // backdrop
       const backdrop = document.createElement('div');
       backdrop.className = 'confirm-modal-backdrop';
-      // modal
+      backdrop.style.position = 'fixed';
+      backdrop.style.inset = 0;
+      backdrop.style.display = 'flex';
+      backdrop.style.alignItems = 'center';
+      backdrop.style.justifyContent = 'center';
+      backdrop.style.zIndex = 12000;
       const box = document.createElement('div');
       box.className = 'confirm-modal';
+      box.style.minWidth = '320px';
+      box.style.maxWidth = '420px';
+      box.style.background = 'linear-gradient(180deg,#061018,#041018)';
+      box.style.borderRadius = '12px';
+      box.style.padding = '14px';
+      box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.6)';
       const msg = document.createElement('div');
       msg.className = 'msg';
+      msg.style.marginBottom = '12px';
       msg.textContent = message;
+      msg.style.color = '#e6eef9';
       const buttons = document.createElement('div');
       buttons.className = 'buttons';
+      buttons.style.display = 'flex';
+      buttons.style.gap = '8px';
+      buttons.style.justifyContent = 'flex-end';
       const yes = document.createElement('button');
       yes.className = 'btn btn-primary';
       yes.textContent = 'Да';
       const no = document.createElement('button');
       no.className = 'btn';
       no.textContent = 'Нет';
-      buttons.appendChild(yes);
       buttons.appendChild(no);
+      buttons.appendChild(yes);
       box.appendChild(msg);
       box.appendChild(buttons);
       backdrop.appendChild(box);
       document.body.appendChild(backdrop);
-      // focus
       yes.focus();
       const cleanup = (res) => {
         try { backdrop.remove(); } catch(e){}
@@ -958,8 +1384,8 @@
     });
   }
 
-  // ensure modal hidden on load
-  window.addEventListener('load', () => { if (modal) modal.classList.add('hidden'); updateFreeSpinStatus(); });
+  // ensure modal hidden on load and update UI
+  window.addEventListener('load', () => { if (modal) modal.classList.add('hidden'); updateFreeSpinStatus(); renderMarket(); ensureProfileMarketButton(); });
 
   // persist
   setInterval(saveState, 2500);
